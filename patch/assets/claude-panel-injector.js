@@ -108,7 +108,10 @@
     updateSqueezeCSS(0);
   }
 
-  const modifiedFixedElements = new WeakMap();
+  // Map, not WeakMap: restoreFixedElements() iterates this and clears it, and a
+  // WeakMap has neither .entries() nor .clear(). The strong refs are bounded —
+  // the map only holds nodes while the panel is open, and is cleared on restore.
+  const modifiedFixedElements = new Map();
 
   const hostEl = document.createElement('div');
   hostEl.id = 'claude-arc-panel-host';

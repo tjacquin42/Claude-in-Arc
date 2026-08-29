@@ -147,6 +147,24 @@ def main():
                 continue
             res = subprocess.run(["node", "--check", js], capture_output=True, text=True)
             check(res.returncode == 0, f"syntax error in {os.path.basename(js)}: {res.stderr.strip()[:200]}")
+
+            # WeakMap/WeakSet are deliberately not enumerable and have no clear().
+            # Calling one of those on them is a TypeError that only fires on the
+            # path that iterates — which is how the panel shipped for two releases
+            # unable to restore the fixed elements it had shifted.
+            with open(js, encoding="utf-8") as fh:
+                src = fh.read()
+            for name, kind in re.findall(
+                r"(?:const|let|var)\s+(\w+)\s*=\s*new\s+(WeakMap|WeakSet)\s*\(", src
+            ):
+                bad = re.findall(
+                    rf"\b{re.escape(name)}\.(entries|keys|values|clear|forEach|size)\b", src
+                ) + re.findall(rf"\bof\s+{re.escape(name)}\b", src)
+                check(
+                    not bad,
+                    f"{os.path.basename(js)}: {name} is a {kind} but is used as an "
+                    f"iterable/clearable ({', '.join(sorted(set(b if isinstance(b, str) else b[0] for b in bad)))})",
+                )
     else:
         print("  (node not found - syntax check skipped)")
 
