@@ -9,6 +9,7 @@ Because Arc doesn't officially support Chrome's `chrome.sidePanel` APIs natively
 - **Builds against whatever Claude release is current.** `./build.sh` fetches the official extension from Google's update endpoint, verifies it carries Anthropic's signing key, and applies the patch on top. No more snapshot going stale between releases.
 - **The patch is separated from the bundle.** `patch/` holds only this project's own code; Anthropic's bundle is no longer vendored in the repository.
 - **Fixed `rules.json`.** Two of the four redirect rules pointed at SVGs that were never committed. Chrome rejects a static ruleset wholesale when a redirect target is missing, so *none* of the four rules were being applied.
+- **Handles the 1.0.85 panel rewrite.** From 1.0.85 the side panel no longer renders the conversation itself — it embeds `https://claude.ai/cic/new` in an iframe. Nested inside the injected panel that gives claude.ai a page-level ancestor, and the framing check refuses it. A scoped `modifyHeaders` rule drops the framing headers for that one sub-frame request. See [Framing the embedded panel](#framing-the-embedded-panel).
 
 ## What's New in v0.2
 
@@ -75,9 +76,31 @@ Everything else lives in `patch/`:
 | `viewport-override.js` | keeps page viewport units correct while the panel squeezes the page |
 | `cmd-e-fallback.js` | ⌘E from inside the iframe, where the extension command never fires |
 | `theme-init.js` | stubs `chrome.tabGroups` and sets the colour mode before first paint |
-| `rules.json` | serves a few claude.ai chip icons locally |
+| `rules.json` | serves a few claude.ai chip icons locally, and unblocks framing for the embedded panel |
 
 `tools/verify-build.py` runs after every build and checks the invariants Arc reports only as a generic "could not load extension": valid manifest JSON, every referenced file present, every DNR redirect target present, the shim imported first, and the Arc modules parsing.
+
+## Framing the embedded panel
+
+Up to 1.0.77 the side panel rendered the conversation natively, so injecting `sidepanel.html` into a page was enough. From 1.0.85 the panel is a shell around an iframe:
+
+```js
+jsx("iframe", { src: "https://claude.ai/cic/new?surface=cic_sidepanel", … })
+```
+
+In the official side panel that iframe has exactly one ancestor, the extension itself. Under this patch it has two, because the panel is injected into a page:
+
+```
+https://any-page.example
+  └─ chrome-extension://…/sidepanel.html      ← the Arc injection
+       └─ https://claude.ai/cic/new           ← new in 1.0.85
+```
+
+Framing permission is evaluated against the **whole** ancestor chain, so whatever claude.ai grants the extension origin, the arbitrary top-level page is also in the chain and is not covered. The browser refuses the frame and the panel shows a "refused to connect" page.
+
+Rule 5 in `patch/rules.json` removes `x-frame-options` and the CSP from that response. It is deliberately narrow — `sub_frame` only, `requestDomains: ["claude.ai"]`, path-anchored on `/cic` — so ordinary claude.ai browsing keeps its protections. `verify-build.py` enforces that narrowness: a header-stripping rule that is not limited to `sub_frame`, or that does not pin `requestDomains`, fails the build.
+
+This is a real trade-off, and worth stating plainly: inside the injected panel, that one claude.ai document runs without its CSP.
 
 ## Notes
 

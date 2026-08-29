@@ -178,6 +178,11 @@ def patch_rules(out_dir, official_dir):
     kept, dropped = [], []
     for rule in rules:
         target = rule.get("action", {}).get("redirect", {}).get("extensionPath", "")
+        if not target:
+            # Not a redirect (modifyHeaders, block, …) — nothing on disk to check.
+            kept.append(rule)
+            continue
+
         rel = target.lstrip("/")
         if os.path.isfile(os.path.join(out_dir, rel)):
             kept.append(rule)

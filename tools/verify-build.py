@@ -83,6 +83,33 @@ def main():
             if target:
                 check(exists(target), f"DNR redirect target missing (disables the whole ruleset): {target}")
 
+            if rule.get("action", {}).get("type") == "modifyHeaders":
+                check(
+                    "declarativeNetRequestWithHostAccess" in m.get("permissions", []),
+                    f"rule {rid} modifies headers but declarativeNetRequestWithHostAccess is missing",
+                )
+                check(
+                    "<all_urls>" in m.get("host_permissions", []),
+                    f"rule {rid} modifies headers but the manifest has no host access",
+                )
+                removed = {
+                    h.get("header", "").lower()
+                    for h in rule["action"].get("responseHeaders", [])
+                    if h.get("operation") == "remove"
+                }
+                # Stripping framing protections is only defensible for the embedded
+                # panel document. Site-wide it would expose every claude.ai page to
+                # clickjacking from any site the user visits.
+                if removed & {"x-frame-options", "content-security-policy"}:
+                    check(
+                        rule.get("condition", {}).get("resourceTypes") == ["sub_frame"],
+                        f"rule {rid} strips framing protection but is not limited to sub_frame",
+                    )
+                    check(
+                        bool(rule.get("condition", {}).get("requestDomains")),
+                        f"rule {rid} strips framing protection without pinning requestDomains",
+                    )
+
     # --- HTML pages: every local script/stylesheet must resolve ---------------
     for html_path in glob.glob(os.path.join(root, "*.html")):
         with open(html_path, encoding="utf-8") as fh:
