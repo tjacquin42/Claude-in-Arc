@@ -88,7 +88,7 @@
       ]
     },
     "condition": {
-      "urlFilter": "||claude.ai/cic",
+      "urlFilter": "||claude.ai",
       "requestDomains": [
         "claude.ai"
       ],

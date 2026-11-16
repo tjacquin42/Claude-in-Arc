@@ -364,3 +364,17 @@ if (_needsPolyfill) {
 
   console.log('[Arc SidePanel Shim] Polyfill installed');
 }
+
+// From 1.0.85 the panel embeds claude.ai in an iframe, which only renders because
+// a static rule strips the framing headers. Chrome disables an entire ruleset
+// silently if any one rule is malformed, and the symptom — a "refused to connect"
+// page inside a nested frame — never reaches this console. So say it out loud.
+chrome.declarativeNetRequest?.getEnabledRulesets?.()
+  .then(ids => {
+    console.log(
+      ids.includes('ruleset_1')
+        ? '[Arc] DNR ruleset_1 enabled — panel framing headers will be stripped'
+        : `[Arc] DNR ruleset_1 NOT enabled (${ids.join(', ') || 'no rulesets'}) — the panel will show "refused to connect"`
+    );
+  })
+  .catch(e => console.log('[Arc] DNR ruleset query failed:', String(e)));
